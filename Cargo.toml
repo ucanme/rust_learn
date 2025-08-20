@@ -1,0 +1,23 @@
+[workspace]
+members = [
+    "src/tcp",
+    "src/p2p",
+]
+
+[workspace.package]
+name = "learn"
+version = "0.1.0"
+edition = "2021"
+description = "learn Rust"
+readme = "README.md"
+repository = "123"
+
+
+
+[workspace.dependencies]
+mio = { version = "0.8", features = ["os-poll", "net"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+tcp = {path = "src/tcp"}
+p2p = {path = "src/p2p"}
