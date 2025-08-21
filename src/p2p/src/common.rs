@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::time::SystemTime;
+use std::time::{SystemTime, Instant};
 
 // 消息类型枚举
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -9,7 +9,9 @@ pub enum MessageType {
     Chat,
     Leave,
     PeerList,
+    PeerListRequest,
     ConnectRequest,
+    ConnectResponse,
     Heartbeat,
     UserJoined,
     UserLeft
@@ -65,6 +67,13 @@ pub struct PeerInfo {
     pub user_id: String,
     pub address: String,
     pub port: u16,
+    #[serde(skip, default = "default_last_heartbeat")]
+    pub last_heartbeat: Instant,
+}
+
+// 为last_heartbeat字段提供默认值
+fn default_last_heartbeat() -> Instant {
+    Instant::now()
 }
 
 impl PeerInfo {
@@ -73,6 +82,7 @@ impl PeerInfo {
             user_id,
             address,
             port,
+            last_heartbeat: Instant::now(),
         }
     }
     
@@ -88,8 +98,8 @@ pub enum P2PError {
     IoError(std::io::Error),
     SerializationError(serde_json::Error),
     InvalidMessage(String),
-    PeerNotFound,
     ConnectionError(String),
+    PeerNotFound,
 }
 
 impl std::fmt::Display for P2PError {
@@ -101,6 +111,24 @@ impl std::fmt::Display for P2PError {
             P2PError::PeerNotFound => write!(f, "Peer not found"),
             P2PError::ConnectionError(s) => write!(f, "Connection error: {}", s),
         }
+    }
+}
+
+// 实现Error trait
+impl std::error::Error for P2PError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            P2PError::IoError(e) => Some(e),
+            P2PError::SerializationError(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+// 实现From<std::io::Error> trait，使?操作符可以自动转换错误类型
+impl From<std::io::Error> for P2PError {
+    fn from(error: std::io::Error) -> Self {
+        P2PError::IoError(error)
     }
 }
 
