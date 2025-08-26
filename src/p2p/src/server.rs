@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant, SystemTime};
 use std::io::{Read, Write};
+use crate::common::{Message, MessageType, PeerInfo, P2PError, serialize_message, deserialize_message, MessageSource};
 
 const SERVER: Token = Token(0);
 const FIRST_PEER: Token = Token(2);
@@ -189,6 +190,7 @@ impl P2PServer {
             sender_peer_address: message.sender_peer_address.clone(),
             sender_listen_port: message.sender_listen_port,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         };
         
         let peer_tokens: Vec<Token> = self.peers.keys().filter(|&t| *t != token).cloned().collect();
@@ -214,6 +216,7 @@ impl P2PServer {
             sender_peer_address: String::new(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         };
         
         let peer_tokens: Vec<Token> = self.peers.keys().cloned().collect();
@@ -263,6 +266,7 @@ impl P2PServer {
                         sender_peer_address: peer_info.address.clone(),
                         sender_listen_port: peer_info.port,
                         timestamp: SystemTime::now(),
+                        source: MessageSource::Server,
                     };
                     
                     self.send_message(token, &connect_response)?;
@@ -345,6 +349,7 @@ impl P2PServer {
             sender_peer_address: String::new(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         };
         
         self.send_message(token, &peer_list_message)?;
@@ -362,6 +367,7 @@ impl P2PServer {
                 sender_peer_address: String::new(),
                 sender_listen_port: 0,
                 timestamp: SystemTime::now(),
+                source: MessageSource::Server,
             };
             
             let peer_tokens: Vec<Token> = self.peers.keys().cloned().collect();

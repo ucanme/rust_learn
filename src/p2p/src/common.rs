@@ -2,6 +2,13 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::time::{SystemTime, Instant};
 
+// 消息来源枚举
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub enum MessageSource {
+    Server,  // 来自服务器
+    Peer,    // 来自对等节点
+}
+
 // 消息类型枚举
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum MessageType {
@@ -27,6 +34,13 @@ pub struct Message {
     pub sender_peer_address: String,
     pub sender_listen_port: u16,
     pub timestamp: SystemTime,
+    #[serde(default = "default_message_source")]
+    pub source: MessageSource,
+}
+
+// 默认消息来源为服务器（为了向后兼容）
+fn default_message_source() -> MessageSource {
+    MessageSource::Server
 }
 
 impl Message {
@@ -39,6 +53,7 @@ impl Message {
             sender_peer_address: "".to_string(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         }
     }
     
@@ -55,6 +70,11 @@ impl Message {
     pub fn with_peer_info(mut self, address: String, port: u16) -> Self {
         self.sender_peer_address = address;
         self.sender_listen_port = port;
+        self
+    }
+    
+    pub fn with_source(mut self, source: MessageSource) -> Self {
+        self.source = source;
         self
     }
 }

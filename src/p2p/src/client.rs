@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::time::{Duration, SystemTime};
 use std::io::{Read, Write};
 use std::sync::mpsc;
+use crate::common::{Message, MessageType, PeerInfo, P2PError, serialize_message, deserialize_message, MessageSource};
 
 const SERVER: Token = Token(0);
 
@@ -92,6 +93,7 @@ impl P2PClient {
             sender_peer_address: "127.0.0.1".to_string(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         };
         
         PendingMessage {
@@ -110,6 +112,7 @@ impl P2PClient {
             sender_peer_address: "127.0.0.1".to_string(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         };
         
         PendingMessage {
@@ -135,6 +138,7 @@ impl P2PClient {
             sender_peer_address: "127.0.0.1".to_string(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         };
 
         self.queue_message(MessageTarget::Server, join_message)?;
@@ -271,7 +275,13 @@ impl P2PClient {
                 let message_data = buffer.drain(..=delimiter_pos).collect::<Vec<_>>();
                 let message_data = &message_data[..message_data.len() - 1];
                 
-                if let Ok(message) = deserialize_message(message_data) {
+                if let Ok(mut message) = deserialize_message(message_data) {
+                    // 根据token来源设置消息来源标识
+                    message.source = if token == SERVER {
+                        MessageSource::Server
+                    } else {
+                        MessageSource::Peer
+                    };
                     messages.push(message);
                 }
             }
@@ -288,7 +298,18 @@ impl P2PClient {
         match message.msg_type {
             MessageType::Chat => {
                 if let Some(content) = &message.content {
-                    println!("[{}]: {}", message.sender_id, content);
+                    // 根据消息来源显示不同的标识
+                    let source_tag = match message.source {
+                        MessageSource::Server => "[服务器]",
+                        MessageSource::Peer => "[P2P]",
+                    };
+                    
+                    // 检查是否为私聊消息
+                    if message.target_id.is_some() {
+                        println!("{}私聊[{}]: {}", source_tag, message.sender_id, content);
+                    } else {
+                        println!("{}公共[{}]: {}", source_tag, message.sender_id, content);
+                    }
                 }
             }
             MessageType::PeerList => {
@@ -340,6 +361,7 @@ impl P2PClient {
             sender_peer_address: "127.0.0.1".to_string(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
+            source: MessageSource::Server,
         };
         self.queue_message(MessageTarget::Server, request)
     }
