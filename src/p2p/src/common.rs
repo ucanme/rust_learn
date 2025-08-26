@@ -27,7 +27,6 @@ pub struct Message {
     pub sender_peer_address: String,
     pub sender_listen_port: u16,
     pub timestamp: SystemTime,
-    pub sender_token: Option<String>,
 }
 
 impl Message {
@@ -40,13 +39,7 @@ impl Message {
             sender_peer_address: "".to_string(),
             sender_listen_port: 0,
             timestamp: SystemTime::now(),
-            sender_token: None,
         }
-    }
-    
-    pub fn with_target(mut self, target_id: String) -> Self {
-        self.target_id = Some(target_id);
-        self
     }
     
     pub fn with_content(mut self, content: String) -> Self {
@@ -54,7 +47,12 @@ impl Message {
         self
     }
     
-    pub fn with_sender_address(mut self, address: String, port: u16) -> Self {
+    pub fn with_target(mut self, target_id: String) -> Self {
+        self.target_id = Some(target_id);
+        self
+    }
+    
+    pub fn with_peer_info(mut self, address: String, port: u16) -> Self {
         self.sender_peer_address = address;
         self.sender_listen_port = port;
         self
@@ -62,18 +60,12 @@ impl Message {
 }
 
 // 节点信息结构体
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct PeerInfo {
     pub user_id: String,
     pub address: String,
     pub port: u16,
-    #[serde(skip, default = "default_last_heartbeat")]
     pub last_heartbeat: Instant,
-}
-
-// 为last_heartbeat字段提供默认值
-fn default_last_heartbeat() -> Instant {
-    Instant::now()
 }
 
 impl PeerInfo {
@@ -87,8 +79,7 @@ impl PeerInfo {
     }
     
     pub fn socket_addr(&self) -> Result<SocketAddr, std::net::AddrParseError> {
-        let addr = format!("{}:{}", self.address, self.port);
-        addr.parse()
+        format!("{}:{}", self.address, self.port).parse()
     }
 }
 
@@ -97,7 +88,6 @@ impl PeerInfo {
 pub enum P2PError {
     IoError(std::io::Error),
     SerializationError(serde_json::Error),
-    InvalidMessage(String),
     ConnectionError(String),
     PeerNotFound,
 }
@@ -107,14 +97,12 @@ impl std::fmt::Display for P2PError {
         match self {
             P2PError::IoError(e) => write!(f, "IO error: {}", e),
             P2PError::SerializationError(e) => write!(f, "Serialization error: {}", e),
-            P2PError::InvalidMessage(s) => write!(f, "Invalid message: {}", s),
-            P2PError::PeerNotFound => write!(f, "Peer not found"),
             P2PError::ConnectionError(s) => write!(f, "Connection error: {}", s),
+            P2PError::PeerNotFound => write!(f, "Peer not found"),
         }
     }
 }
 
-// 实现Error trait
 impl std::error::Error for P2PError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -125,26 +113,36 @@ impl std::error::Error for P2PError {
     }
 }
 
-// 实现From<std::io::Error> trait，使?操作符可以自动转换错误类型
 impl From<std::io::Error> for P2PError {
     fn from(error: std::io::Error) -> Self {
         P2PError::IoError(error)
     }
 }
 
+impl From<serde_json::Error> for P2PError {
+    fn from(error: serde_json::Error) -> Self {
+        P2PError::SerializationError(error)
+    }
+}
+
 // 常量定义
-pub const SERVER_ADDR: &str = "0.0.0.0:8080";
 pub const HEARTBEAT_INTERVAL: u64 = 5;
 
 // 消息序列化和反序列化函数
 pub fn serialize_message(message: &Message) -> Result<Vec<u8>, P2PError> {
-    let json = serde_json::to_string(message).map_err(P2PError::SerializationError)?;
-    let mut data = json.as_bytes().to_vec();
-    // 添加分隔符以区分消息
+    let json = serde_json::to_string(message)?;
+    let mut data = json.into_bytes();
     data.push(b'\n');
     Ok(data)
 }
 
 pub fn deserialize_message(data: &[u8]) -> Result<Message, P2PError> {
-    serde_json::from_slice(data).map_err(P2PError::SerializationError)
+    let json_str = std::str::from_utf8(data)
+        .map_err(|_| P2PError::SerializationError(
+            serde_json::Error::io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Invalid UTF-8 sequence"
+            ))
+        ))?;
+    serde_json::from_str(json_str).map_err(P2PError::SerializationError)
 }

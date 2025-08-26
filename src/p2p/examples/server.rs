@@ -1,14 +1,14 @@
 use p2p::server::P2PServer;
 use p2p::common::P2PError;
+use std::env;
 
 fn main() -> Result<(), P2PError> {
-    println!("Starting P2P server...");
+    let addr = env::args().nth(1).unwrap_or_else(|| "127.0.0.1:8080".to_string());
+    println!("Starting P2P server on {}...", addr);
     
-    // 创建并启动P2P服务端，监听8888端口
-    let mut server = P2PServer::new("0.0.0.0:8888")?;
-    println!("P2P server started successfully");
+    let mut server = P2PServer::new(&addr)?;
+    println!("Server started successfully on {}!", addr);
     
-    // 启动服务端事件循环
-    // 这个调用会一直阻塞直到服务端关闭
+    // Start the server event loop
     server.start()
 }
