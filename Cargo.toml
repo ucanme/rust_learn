@@ -1,11 +1,12 @@
 [workspace]
+resolver = "2"
 members = [
     "src/tcp",
     "src/p2p",
+    "src/log",
 ]
 
 [workspace.package]
-name = "learn"
 version = "0.1.0"
 edition = "2021"
 description = "learn Rust"

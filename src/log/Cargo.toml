@@ -1,0 +1,11 @@
+[package]
+name = "log"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[dependencies]
+log = "0.4.17"   # 日志接口
+log4rs = "1.1.1" # log4rs 实现

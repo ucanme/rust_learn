@@ -1,0 +1,61 @@
+# 检查配置更新的间隔（动态重载）
+refresh_rate: 30 seconds
+
+# 定义输出源（Appenders）
+appenders:
+  # 控制台输出
+  stdout:
+    kind: console
+    target: stderr         # 可选 stdout 或 stderr
+    encoder:
+      kind: pattern
+      pattern: "{d(%Y-%m-%d %H:%M:%S)} [{f}:{L}] {l} {m}{n}"
+
+  # 单一文件输出
+  file:
+    kind: file
+    path: "logs/app.log"   # 文件路径
+    append: true           # 是否追加模式
+    encoder:
+      kind: pattern
+      pattern: "{d} - {m}{n}"
+
+  # 滚动文件输出（防止单个文件过大）
+  rolling_file:
+    kind: rolling_file
+    path: "logs/rolling.log"
+    append: true
+    encoder:
+      kind: pattern
+      pattern: "{d} - {m}{n}"
+    policy:
+      kind: compound
+      # 触发策略：文件大小达到 10MB 时滚动
+      trigger:
+        kind: size
+        limit: 10mb
+      # 滚动策略：固定窗口模式，保留最多5个归档文件
+      roller:
+        kind: fixed_window
+        pattern: "logs/archive.{}.log"  # 归档文件名模式（需包含{}）
+        base: 1                         # 起始索引
+        count: 5                        # 保留文件数
+
+# 根日志记录器配置
+root:
+  level: info           # 日志级别：off, error, warn, info, debug, trace
+  appenders:
+    - stdout
+    - rolling_file
+
+# 特定模块的日志记录器（可覆盖根配置）
+loggers:
+  app::backend::db:
+    level: debug        # 为特定模块设置更详细的级别
+    additive: true      # 是否继承根 appender（false 时仅使用自己的）
+
+  app::requests:
+    level: info
+    appenders:
+      - file
+    additive: false     # 不继承根 appender，仅输出到文件

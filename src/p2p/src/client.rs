@@ -23,6 +23,12 @@ pub enum MessageTarget {
     Peer(Token),
 }
 
+/// 客户端控制指令
+#[derive(Debug, Clone)]
+pub enum ClientCommand {
+    Stop,
+}
+
 pub struct P2PClient {
     poll: Poll,
     events: Events,
@@ -35,6 +41,9 @@ pub struct P2PClient {
     // 消息发送通道
     message_sender: mpsc::Sender<PendingMessage>,
     message_receiver: mpsc::Receiver<PendingMessage>,
+    // 控制指令通道
+    control_sender: mpsc::Sender<ClientCommand>,
+    control_receiver: mpsc::Receiver<ClientCommand>,
 }
 
 impl P2PClient {
@@ -44,6 +53,8 @@ impl P2PClient {
         
         // 创建消息发送通道
         let (message_sender, message_receiver) = mpsc::channel();
+        // 创建控制指令通道
+        let (control_sender, control_receiver) = mpsc::channel();
         
         Ok(Self {
             poll,
@@ -56,6 +67,8 @@ impl P2PClient {
             known_peers: HashMap::new(),
             message_sender,
             message_receiver,
+            control_sender,
+            control_receiver,
         })
     }
     
@@ -64,11 +77,34 @@ impl P2PClient {
         self.message_sender.clone()
     }
     
+    /// 获取控制指令发送器，用于从外部控制客户端
+    pub fn get_control_sender(&self) -> mpsc::Sender<ClientCommand> {
+        self.control_sender.clone()
+    }
+    
     /// 便利方法：创建聊天消息（供外部使用）
     pub fn create_chat_message(&self, target_id: Option<String>, content: String) -> PendingMessage {
         let message = Message {
             msg_type: MessageType::Chat,
             sender_id: self.user_id.clone(),
+            target_id,
+            content: Some(content),
+            sender_peer_address: "127.0.0.1".to_string(),
+            sender_listen_port: 0,
+            timestamp: SystemTime::now(),
+        };
+        
+        PendingMessage {
+            target: MessageTarget::Server,
+            message,
+        }
+    }
+    
+    /// 静态方法：创建聊天消息（不需要客户端实例）
+    pub fn create_chat_message_static(user_id: String, target_id: Option<String>, content: String) -> PendingMessage {
+        let message = Message {
+            msg_type: MessageType::Chat,
+            sender_id: user_id,
             target_id,
             content: Some(content),
             sender_peer_address: "127.0.0.1".to_string(),
@@ -119,22 +155,29 @@ impl P2PClient {
         self.process_events()
     }
     
-    /// 运行客户端并提供外部输入处理接口
-    pub fn run_with_input_handler<F>(&mut self, mut input_handler: F) -> Result<(), P2PError> 
-    where 
-        F: FnMut(&mut Self) -> Result<bool, P2PError>, // 返回 true 表示继续运行，false 表示退出
-    {
+    /// 运行客户端（纯粹的网络事件循环）
+    /// 使用通道接收外部指令和消息
+    pub fn run(&mut self) -> Result<(), P2PError> {
         loop {
             // 处理网络事件和待发送消息
             self.poll.poll(&mut self.events, Some(Duration::from_millis(50)))?;
             self.process_events()?;
             
-            // 调用外部输入处理器
-            if !input_handler(self)? {
-                break;
+            // 检查控制指令
+            match self.control_receiver.try_recv() {
+                Ok(ClientCommand::Stop) => {
+                    println!("收到停止指令，正在关闭客户端...");
+                    break;
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    // 没有指令，继续运行
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    // 控制通道已断开，退出
+                    break;
+                }
             }
         }
-        
         Ok(())
     }
     
