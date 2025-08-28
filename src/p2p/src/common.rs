@@ -145,6 +145,12 @@ impl From<serde_json::Error> for P2PError {
     }
 }
 
+impl From<std::net::AddrParseError> for P2PError {
+    fn from(error: std::net::AddrParseError) -> Self {
+        P2PError::ConnectionError(format!("Address parse error: {}", error))
+    }
+}
+
 // 常量定义
 pub const HEARTBEAT_INTERVAL: u64 = 5;
 

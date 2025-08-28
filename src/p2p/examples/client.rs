@@ -21,7 +21,7 @@ fn main() -> Result<(), P2PError> {
         return Ok(());
     }
     
-    // 创建、连接P2P客户端
+    // 创建、连接P2P客户端（使用随机端口）
     let mut client = P2PClient::new(&server_addr, 0, user_id.clone())?;
     client.connect()?;
     client.request_peer_list()?;
@@ -30,6 +30,11 @@ fn main() -> Result<(), P2PError> {
     println!("\n使用说明:");
     println!("  直接输入消息发送公共消息");
     println!("  @<用户名> <消息> 发送私聊消息");
+    println!("  /list 显示已知对等节点列表");
+    println!("  /refresh 刷新对等节点列表");
+    println!("  /status 显示连接状态");
+    println!("  /p2p <用户名> 建立直接P2P连接");
+    println!("  /direct <用户名> <消息> 发送直接P2P消息");
     println!("  /exit 退出客户端\n");
     
     // 获取通道发送器
@@ -45,9 +50,17 @@ fn main() -> Result<(), P2PError> {
         let stdin = io::stdin();
         let mut handle = stdin.lock();
         
+        println!("输入线程已启动，可以开始聊天\n");
+        
         loop {
             let mut input = String::new();
             match handle.read_line(&mut input) {
+                Ok(0) => {
+                    // EOF - 通常是 Ctrl+D
+                    println!("\n检测到输入结束，正在退出...");
+                    let _ = control_for_input.send(ClientCommand::Stop);
+                    break;
+                }
                 Ok(_) => {
                     let input = input.trim();
                     
@@ -62,18 +75,74 @@ fn main() -> Result<(), P2PError> {
                         break;
                     }
                     
+                    // 检查列表命令
+                    if input.eq_ignore_ascii_case("/list") {
+                        let _ = control_for_input.send(ClientCommand::ListPeers);
+                        continue;
+                    }
+                    
+                    // 检查状态命令
+                    if input.eq_ignore_ascii_case("/status") {
+                        let _ = control_for_input.send(ClientCommand::ShowStatus);
+                        continue;
+                    }
+                    
+                    // 检查刷新命令
+                    if input.eq_ignore_ascii_case("/refresh") {
+                        let _ = control_for_input.send(ClientCommand::RefreshPeers);
+                        continue;
+                    }
+                    
+                    // 检查P2P连接命令
+                    if let Some(peer_id) = input.strip_prefix("/p2p ") {
+                        let peer_id = peer_id.trim();
+                        if !peer_id.is_empty() {
+                            println!("🔗 正在建立P2P连接到: {}", peer_id);
+                            let _ = control_for_input.send(ClientCommand::ConnectToPeer(peer_id.to_string()));
+                        } else {
+                            println!("格式: /p2p <用户名>");
+                        }
+                        continue;
+                    }
+                    
+                    // 检查直接消息命令
+                    if let Some(direct_msg) = input.strip_prefix("/direct ") {
+                        if let Some((peer_id, content)) = direct_msg.split_once(' ') {
+                            let peer_id = peer_id.trim();
+                            let content = content.trim();
+                            if !peer_id.is_empty() && !content.is_empty() {
+                                let _ = control_for_input.send(ClientCommand::SendDirectMessage(peer_id.to_string(), content.to_string()));
+                            } else {
+                                println!("格式: /direct <用户名> <消息>");
+                            }
+                        } else {
+                            println!("格式: /direct <用户名> <消息>");
+                        }
+                        continue;
+                    }
+                    
                     // 处理消息发送
                     handle_user_input(&client_for_input, input, &user_id_for_input);
                 }
-                Err(_) => break,
+                Err(e) => {
+                    eprintln!("读取输入错误: {}", e);
+                    println!("输入出错，正在退出...");
+                    let _ = control_for_input.send(ClientCommand::Stop);
+                    break;
+                }
             }
         }
+        println!("输入线程已结束");
     });
     
     // 运行客户端 - 现在非常简洁！
-    client.run()?;
-    
-    println!("客户端已断开连接。");
+    match client.run() {
+        Ok(_) => println!("客户端正常退出。"),
+        Err(e) => {
+            eprintln!("客户端运行出错: {}", e);
+            println!("客户端已断开连接。");
+        }
+    }
     Ok(())
 }
 

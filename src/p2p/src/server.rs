@@ -170,6 +170,9 @@ impl P2PServer {
     
     fn handle_join_message(&mut self, message: &Message, token: Token) -> Result<(), P2PError> {
         let user_id = &message.sender_id;
+        println!("🔥 收到用户 {} 的join消息，监听地址: {}:{}", 
+                 user_id, message.sender_peer_address, message.sender_listen_port);
+        
         let peer_info = PeerInfo::new(
             user_id.clone(),
             message.sender_peer_address.clone(),
@@ -179,7 +182,7 @@ impl P2PServer {
         self.peers.insert(token, peer_info.clone());
         self.user_to_token.insert(user_id.clone(), token);
         
-        println!("User {} joined", user_id);
+        println!("User {} joined with listen port {}", user_id, message.sender_listen_port);
         
         // Notify other users
         let join_notification = Message {
@@ -338,6 +341,11 @@ impl P2PServer {
         let peer_list: Vec<_> = self.peers.values()
             .map(|info| (info.user_id.clone(), info.address.clone(), info.port))
             .collect();
+        
+        println!("🗺️ 发送对等节点列表给 token {:?}, 包含 {} 个节点:", token, peer_list.len());
+        for (user_id, address, port) in &peer_list {
+            println!("  - {}: {}:{}", user_id, address, port);
+        }
         
         let peer_list_data = serde_json::to_vec(&peer_list)?;
         
